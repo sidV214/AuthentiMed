@@ -1,73 +1,57 @@
-# React + TypeScript + Vite
+AuthentiMed 🛡️💊
+AuthentiMed is a dual-layered security ecosystem designed to eradicate counterfeit medications from the global supply chain. By integrating Deep Learning Computer Vision with Immutable Blockchain Ledgers, we provide a "mathematical certainty" of authenticity from the factory floor to the patient's hand.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+🚀 The Problem
+Human Cost: Counterfeit drugs contribute to over 1 million deaths annually.
 
-Currently, two official plugins are available:
+Economic Impact: The pharmaceutical industry loses over $200 billion per year to illicit trade.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Technical Gaps: Existing QR codes are easily cloned, and centralized databases remain a "single point of failure".
 
-## React Compiler
+💡 Our Solution: The "Dual-Shield"
+We implement a two-factor verification process:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+AI Physical Fingerprinting: Analyzes microscopic packaging anomalies and OCR labels that are impossible to replicate manually.
 
-## Expanding the ESLint configuration
+Blockchain Digital Twin: Records every transaction on a decentralized ledger, ensuring the digital record matches the physical product.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+🛠️ Tech Stack
+Mobile: React Native (Cross-platform Android/iOS application).
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+AI/ML: Python, TensorFlow, PyTorch (CNN models for image analysis).
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Blockchain: Solidity, Hardhat (Smart Contracts), Ethers.js (Web3 Bridge for React Native).
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Storage: IPFS (Decentralized metadata/image storage).
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+🗺️ Implementation Roadmap
+Phase 1: MVP Foundations
+Training the AI model for high-fidelity packaging recognition and OCR label validation.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Deployment of core Smart Contracts on Testnet with initial schema design.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Utilizing 6-hour agile sprint cycles to refine UI/UX and data flow integrity.
+
+Phase 2: Pilot & Integration (6–12 Months)
+Bridging AI scoring with Blockchain via Ethers.js for real-time verification.
+
+Live testing with supply chain partners to simulate "Factory-to-Consumer" flows.
+
+Launching a "Red Flag" dashboard for regulatory bodies like the FDA or NCB.
+
+Phase 3: Global Scale (18+ Months)
+Onboarding major manufacturers to the Mainnet.
+
+Launching an API marketplace to allow 3rd-party logistics (3PL) integration.
+
+🔮 Future Scope
+IoT Smart Logistics: Integration of real-time temperature and humidity sensors for cold-chain monitoring.
+
+Digital Health Passport: Providing patients with globally verified, tamper-proof medication records.
+
+Predictive Defense: Using AI to forecast and identify counterfeit "hotspots" before products reach the market.
+
+📝 License
+This project is developed under the AuthentiMed initiative.
+
+"Building a world where 'Authenticity Guaranteed' is a mathematical certainty, not a marketing promise."
