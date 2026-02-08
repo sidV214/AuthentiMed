@@ -1,4 +1,3 @@
-import React from "react";
 import { Building2, Truck, Shield, Stethoscope, User } from "lucide-react";
 import {
   Card,
