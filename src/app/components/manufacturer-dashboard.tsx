@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2,
   LogOut,
@@ -21,55 +21,170 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useAuth, type BackendRole } from '../../context/AuthContext';
+import { api } from '../../services/api';
 
 interface DashboardProps {
   onLogout: () => void;
 }
 
-const mockBatches = [
-  {
-    id: 'BATCH-2026-001',
-    medicineName: 'Amoxicillin 500mg',
-    quantity: 10000,
-    status: 'verified',
-    aiConfidence: 98.5,
-    date: '2026-02-01',
-    location: 'Mumbai Plant',
-  },
-  {
-    id: 'BATCH-2026-002',
-    medicineName: 'Ibuprofen 200mg',
-    quantity: 15000,
-    status: 'verified',
-    aiConfidence: 97.2,
-    date: '2026-02-02',
-    location: 'Delhi Plant',
-  },
-  {
-    id: 'BATCH-2026-003',
-    medicineName: 'Paracetamol 650mg',
-    quantity: 20000,
-    status: 'pending',
-    aiConfidence: null,
-    date: '2026-02-04',
-    location: 'Bangalore Plant',
-  },
-];
+type BatchStatus = 'pending' | 'verified' | 'failed';
 
-const chartData = [
-  { month: 'Jan', verified: 45, pending: 3, failed: 2 },
-  { month: 'Feb', verified: 38, pending: 5, failed: 1 },
-];
+interface ManufacturerBatch {
+  _id: string;
+  batchId: string;
+  medicineName: string;
+  quantity: number;
+  manufacturingDate: string;
+  status: BatchStatus;
+  aiConfidenceScore?: number | null;
+  blockchainTxHash?: string | null;
+  qrCodeUrl?: string | null;
+  currentOwner?: {
+    _id: string;
+    name: string;
+    role: BackendRole;
+  };
+  timeline?: {
+    event: string;
+    timestamp: string;
+  }[];
+}
 
 export function ManufacturerDashboard({ onLogout }: DashboardProps) {
+  const { user } = useAuth();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
-  const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [batches, setBatches] = useState<ManufacturerBatch[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [formBatchId, setFormBatchId] = useState('');
+  const [formMedicineName, setFormMedicineName] = useState('');
+  const [formQuantity, setFormQuantity] = useState('');
+  const [formManufacturingDate, setFormManufacturingDate] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.token) return;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await api('batches', { method: 'GET', token: user.token });
+        setBatches(data);
+      } catch (err: any) {
+        setError(err?.message || 'Failed to load batches');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [user?.token]);
+
+  const stats = useMemo(() => {
+    const total = batches.length;
+    const verified = batches.filter((b) => b.status === 'verified').length;
+    const pending = batches.filter((b) => b.status === 'pending').length;
+    const failed = batches.filter((b) => b.status === 'failed').length;
+    const successRate = total ? (verified / total) * 100 : 0;
+    return { total, verified, pending, failed, successRate };
+  }, [batches]);
+
+  const chartData = useMemo(() => {
+    const byMonth: Record<string, { month: string; verified: number; pending: number; failed: number }> = {};
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    batches.forEach((batch) => {
+      const d = new Date(batch.manufacturingDate);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!byMonth[key]) {
+        byMonth[key] = {
+          month: `${monthNames[d.getMonth()]} ${d.getFullYear()}`,
+          verified: 0,
+          pending: 0,
+          failed: 0,
+        };
+      }
+      if (batch.status === 'verified') byMonth[key].verified += 1;
+      if (batch.status === 'pending') byMonth[key].pending += 1;
+      if (batch.status === 'failed') byMonth[key].failed += 1;
+    });
+    return Object.values(byMonth);
+  }, [batches]);
 
   const handleGenerateQR = (batchId: string) => {
-    setSelectedBatch(batchId);
+    setSelectedBatchId(batchId);
     setShowQRDialog(true);
   };
+
+  const handleCreateBatch = async () => {
+    if (!user?.token) return;
+    setCreateError(null);
+    if (!formMedicineName || !formQuantity || !formManufacturingDate) {
+      setCreateError('Please fill in medicine name, quantity, and manufacturing date.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const body: any = {
+        medicineName: formMedicineName,
+        quantity: Number(formQuantity),
+        manufacturingDate: formManufacturingDate,
+      };
+      if (formBatchId.trim()) {
+        body.batchId = formBatchId.trim();
+      }
+      const created = await api('batches', {
+        method: 'POST',
+        body,
+        token: user.token,
+      });
+      setBatches((prev) => [created, ...prev]);
+      setShowCreateDialog(false);
+      setFormBatchId('');
+      setFormMedicineName('');
+      setFormQuantity('');
+      setFormManufacturingDate('');
+    } catch (err: any) {
+      setCreateError(err?.message || 'Failed to create batch');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const selectedBatch = selectedBatchId
+    ? batches.find((b) => b.batchId === selectedBatchId)
+    : null;
+
+  const getLocationLabel = (batch: ManufacturerBatch) => {
+    if (batch.currentOwner && batch.currentOwner.name && batch.currentOwner.role) {
+      const role = batch.currentOwner.role;
+      const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+      return `${roleLabel} - ${batch.currentOwner.name}`;
+    }
+    return 'Unknown';
+  };
+
+  const timelineItems = useMemo(() => {
+    const items: { batchId: string; event: string; timestamp: string }[] = [];
+    batches.forEach((batch) => {
+      (batch.timeline ?? []).forEach((entry) => {
+        if (!entry?.event || !entry?.timestamp) return;
+        items.push({
+          batchId: batch.batchId,
+          event: entry.event,
+          timestamp: entry.timestamp,
+        });
+      });
+    });
+    items.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
+    return items;
+  }, [batches]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,7 +214,7 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>Total Batches</CardDescription>
-              <CardTitle className="text-3xl">127</CardTitle>
+              <CardTitle className="text-3xl">{stats.total}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-green-600">
@@ -112,18 +227,20 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>AI Verified</CardDescription>
-              <CardTitle className="text-3xl text-green-600">119</CardTitle>
+              <CardTitle className="text-3xl text-green-600">{stats.verified}</CardTitle>
             </CardHeader>
             <CardContent>
-              <Progress value={93.7} className="h-2" />
-              <p className="text-sm text-gray-500 mt-2">93.7% success rate</p>
+              <Progress value={stats.successRate} className="h-2" />
+              <p className="text-sm text-gray-500 mt-2">
+                {stats.successRate.toFixed(1)}% success rate
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>Pending Review</CardDescription>
-              <CardTitle className="text-3xl text-yellow-600">6</CardTitle>
+              <CardTitle className="text-3xl text-yellow-600">{stats.pending}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-500">Awaiting AI verification</p>
@@ -133,7 +250,7 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>Failed Verification</CardDescription>
-              <CardTitle className="text-3xl text-red-600">2</CardTitle>
+              <CardTitle className="text-3xl text-red-600">{stats.failed}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-500">Requires attention</p>
@@ -168,21 +285,38 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label>Batch ID</Label>
-                        <Input placeholder="BATCH-2026-XXX" />
+                        <Input
+                          placeholder="BATCH-2026-XXX"
+                          value={formBatchId}
+                          onChange={(e) => setFormBatchId(e.target.value)}
+                        />
                       </div>
                       <div>
                         <Label>Medicine Name</Label>
-                        <Input placeholder="e.g., Aspirin 100mg" />
+                        <Input
+                          placeholder="e.g., Aspirin 100mg"
+                          value={formMedicineName}
+                          onChange={(e) => setFormMedicineName(e.target.value)}
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label>Quantity</Label>
-                        <Input type="number" placeholder="10000" />
+                        <Input
+                          type="number"
+                          placeholder="10000"
+                          value={formQuantity}
+                          onChange={(e) => setFormQuantity(e.target.value)}
+                        />
                       </div>
                       <div>
                         <Label>Manufacturing Date</Label>
-                        <Input type="date" />
+                        <Input
+                          type="date"
+                          value={formManufacturingDate}
+                          onChange={(e) => setFormManufacturingDate(e.target.value)}
+                        />
                       </div>
                     </div>
                     <div>
@@ -200,17 +334,26 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
                         <p className="text-sm text-gray-500">Upload quality certificates (PDF)</p>
                       </div>
                     </div>
-                    <Button className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700">
-                      Submit for AI Verification
+                    {createError && (
+                      <p className="text-sm text-red-600">{createError}</p>
+                    )}
+                    <Button
+                      className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
+                      onClick={handleCreateBatch}
+                      disabled={creating}
+                    >
+                      {creating ? 'Submitting…' : 'Submit for AI Verification'}
                     </Button>
                   </div>
                 </DialogContent>
               </Dialog>
             </div>
 
+            {loading && <p className="text-sm text-gray-500">Loading batches…</p>}
+            {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="space-y-3">
-              {mockBatches.map((batch) => (
-                <Card key={batch.id} className="hover:shadow-md transition-shadow">
+              {batches.map((batch) => (
+                <Card key={batch._id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -233,7 +376,7 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
                           <div>
                             <p className="text-xs text-gray-500">Batch ID</p>
-                            <p>{batch.id}</p>
+                            <p>{batch.batchId}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Quantity</p>
@@ -241,20 +384,20 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Date</p>
-                            <p>{batch.date}</p>
+                            <p>{new Date(batch.manufacturingDate).toLocaleDateString()}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Location</p>
-                            <p>{batch.location}</p>
+                            <p>{getLocationLabel(batch)}</p>
                           </div>
                         </div>
-                        {batch.aiConfidence && (
+                        {typeof batch.aiConfidenceScore === 'number' && (
                           <div className="mt-4">
                             <div className="flex items-center justify-between text-sm mb-1">
                               <span className="text-gray-600">AI Confidence Score</span>
-                              <span className="text-green-600">{batch.aiConfidence}%</span>
+                              <span className="text-green-600">{batch.aiConfidenceScore}%</span>
                             </div>
-                            <Progress value={batch.aiConfidence} className="h-2" />
+                            <Progress value={batch.aiConfidenceScore} className="h-2" />
                           </div>
                         )}
                       </div>
@@ -262,7 +405,7 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
                         <Button
                           variant="outline"
                           className="ml-4"
-                          onClick={() => handleGenerateQR(batch.id)}
+                          onClick={() => handleGenerateQR(batch.batchId)}
                         >
                           <QrCode className="w-4 h-4 mr-2" />
                           View QR Code
@@ -307,26 +450,23 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {[
-                    { date: '2026-02-04 09:00', event: 'Batch created', status: 'completed' },
-                    { date: '2026-02-04 09:15', event: 'Images uploaded', status: 'completed' },
-                    { date: '2026-02-04 09:30', event: 'AI verification initiated', status: 'completed' },
-                    { date: '2026-02-04 09:35', event: 'AI verification passed (98.5%)', status: 'completed' },
-                    { date: '2026-02-04 10:00', event: 'QR code generated', status: 'completed' },
-                    { date: '2026-02-04 14:00', event: 'Blockchain record created', status: 'completed' },
-                    { date: 'Pending', event: 'Shipped to distributor', status: 'pending' },
-                  ].map((item, index) => (
-                    <div key={index} className="flex gap-4">
+                  {timelineItems.length === 0 && (
+                    <p className="text-sm text-gray-500">
+                      No lifecycle events recorded yet.
+                    </p>
+                  )}
+                  {timelineItems.map((item, index) => (
+                    <div key={`${item.batchId}-${item.timestamp}-${index}`} className="flex gap-4">
                       <div className="flex flex-col items-center">
-                        <div
-                          className={`w-3 h-3 rounded-full ${
-                            item.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'
-                          }`}
-                        />
-                        {index < 6 && <div className="w-0.5 h-12 bg-gray-200" />}
+                        <div className="w-3 h-3 rounded-full bg-green-500" />
+                        {index < timelineItems.length - 1 && (
+                          <div className="w-0.5 h-12 bg-gray-200" />
+                        )}
                       </div>
                       <div className="flex-1 pb-8">
-                        <p className="text-sm text-gray-500">{item.date}</p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(item.timestamp).toLocaleString()} • Batch {item.batchId}
+                        </p>
                         <p>{item.event}</p>
                       </div>
                     </div>
@@ -344,14 +484,36 @@ export function ManufacturerDashboard({ onLogout }: DashboardProps) {
           <DialogHeader>
             <DialogTitle>Blockchain QR Code</DialogTitle>
             <DialogDescription>
-              This QR code is linked to the blockchain record for batch {selectedBatch}
+              {selectedBatch
+                ? `This QR code is linked to the blockchain record for batch ${selectedBatch.batchId}`
+                : 'No batch selected'}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center py-6">
             <div className="w-64 h-64 bg-white border-4 border-blue-600 rounded-lg flex items-center justify-center mb-4">
-              <QrCode className="w-48 h-48 text-gray-800" />
+              {selectedBatch?.qrCodeUrl ? (
+                <img
+                  src={selectedBatch.qrCodeUrl}
+                  alt={`QR for batch ${selectedBatch.batchId}`}
+                  className="w-56 h-56 object-contain"
+                />
+              ) : (
+                <QrCode className="w-48 h-48 text-gray-800" />
+              )}
             </div>
-            <p className="text-sm text-gray-500 mb-4">Batch ID: {selectedBatch}</p>
+            <p className="text-sm text-gray-500 mb-2">
+              Batch ID: {selectedBatch?.batchId ?? 'N/A'}
+            </p>
+            {selectedBatch?.blockchainTxHash && (
+              <a
+                href={`https://amoy.polygonscan.com/tx/${selectedBatch.blockchainTxHash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-blue-600 underline mb-4 break-all"
+              >
+                View on PolygonScan: {selectedBatch.blockchainTxHash}
+              </a>
+            )}
             <Button className="w-full">Download QR Code</Button>
           </div>
         </DialogContent>

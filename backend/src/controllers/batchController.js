@@ -8,7 +8,7 @@ console.log("=== BATCH CONTROLLER FILE LOADED ===");
 
 export async function createBatch(req, res) {
   try {
-    const { medicineName, quantity, manufacturingDate, packagingImages: rawPackagingImages, certificates = [] } = req.body;
+    const { batchId: clientBatchId, medicineName, quantity, manufacturingDate, packagingImages: rawPackagingImages, certificates = [] } = req.body;
     const manufacturerId = req.user.id;
 
     const packagingImages = Array.isArray(rawPackagingImages)
@@ -21,7 +21,9 @@ export async function createBatch(req, res) {
       return res.status(400).json({ message: 'medicineName, quantity and manufacturingDate are required' });
     }
 
-    const batchId = crypto.randomUUID();
+    const batchId = clientBatchId && typeof clientBatchId === 'string' && clientBatchId.trim()
+      ? clientBatchId.trim()
+      : crypto.randomUUID();
     const timeline = [{ event: 'Batch created', timestamp: new Date() }];
 
     const batch = await Batch.create({
@@ -99,5 +101,17 @@ console.log("typeof firstImageUrl:", typeof firstImageUrl);
     return res.status(201).json(batch);
   } catch (err) {
     res.status(500).json({ message: err.message || 'Failed to create batch' });
+  }
+}
+
+export async function getManufacturerBatches(req, res) {
+  try {
+    const manufacturerId = req.user.id;
+    const batches = await Batch.find({ manufacturer: manufacturerId })
+      .populate('currentOwner', 'name role')
+      .sort({ createdAt: -1 });
+    return res.status(200).json(batches);
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to fetch batches' });
   }
 }
